@@ -8,7 +8,7 @@ class Tirith < Formula
   # TODO: uncomment and fill for each release
   # url "https://github.com/sheeki03/tirith/archive/refs/tags/v#{version}.tar.gz"
   # sha256 "PLACEHOLDER"
-  license any_of: ["MIT", "Apache-2.0"]
+  license "Apache-2.0"
 
   depends_on "rust" => :build
 
