@@ -240,7 +240,7 @@ fn tokenize_powershell(input: &str) -> Vec<Segment> {
                     && remaining[4..]
                         .chars()
                         .next()
-                        .map_or(true, |c| c.is_whitespace())
+                        .is_none_or(|c| c.is_whitespace())
                 {
                     push_segment(&mut segments, &current, preceding_sep.take());
                     current.clear();
@@ -251,7 +251,7 @@ fn tokenize_powershell(input: &str) -> Vec<Segment> {
                     && remaining[3..]
                         .chars()
                         .next()
-                        .map_or(true, |c| c.is_whitespace())
+                        .is_none_or(|c| c.is_whitespace())
                 {
                     push_segment(&mut segments, &current, preceding_sep.take());
                     current.clear();

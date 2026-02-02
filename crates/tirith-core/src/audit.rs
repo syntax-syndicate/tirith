@@ -91,6 +91,15 @@ fn default_log_path() -> Option<PathBuf> {
     crate::policy::data_dir().map(|d| d.join("log.jsonl"))
 }
 
+fn redact_command(cmd: &str) -> String {
+    // Redact: keep first 80 chars, replace the rest
+    if cmd.len() <= 80 {
+        cmd.to_string()
+    } else {
+        format!("{}[...redacted {} chars]", &cmd[..80], cmd.len() - 80)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -125,18 +134,12 @@ mod tests {
         log_verdict(&verdict, "test cmd", Some(log_path.clone()), None);
 
         // File should not have been created
-        assert!(!log_path.exists(), "log file should not be created when TIRITH_LOG=0");
+        assert!(
+            !log_path.exists(),
+            "log file should not be created when TIRITH_LOG=0"
+        );
 
         // Clean up env var
         std::env::remove_var("TIRITH_LOG");
-    }
-}
-
-fn redact_command(cmd: &str) -> String {
-    // Redact: keep first 80 chars, replace the rest
-    if cmd.len() <= 80 {
-        cmd.to_string()
-    } else {
-        format!("{}[...redacted {} chars]", &cmd[..80], cmd.len() - 80)
     }
 }

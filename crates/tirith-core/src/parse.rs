@@ -548,7 +548,10 @@ mod tests {
     fn test_docker_registry_port_no_tag() {
         let u = parse_docker_ref("registry.io:5000/nginx");
         if let UrlLike::DockerRef {
-            registry, image, tag, ..
+            registry,
+            image,
+            tag,
+            ..
         } = &u
         {
             assert_eq!(registry.as_deref(), Some("registry.io:5000"));
@@ -563,7 +566,10 @@ mod tests {
     fn test_docker_registry_port_with_dotted_tag() {
         let u = parse_docker_ref("registry.io:5000/nginx:1.25");
         if let UrlLike::DockerRef {
-            registry, image, tag, ..
+            registry,
+            image,
+            tag,
+            ..
         } = &u
         {
             assert_eq!(registry.as_deref(), Some("registry.io:5000"));

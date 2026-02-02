@@ -305,16 +305,9 @@ pub fn extract_urls(input: &str, shell: ShellType) -> Vec<ExtractedUrl> {
                                 );
                             }
                         }
-                    } else if matches!(
-                        subcmd_lower.as_str(),
-                        "pull" | "run" | "create"
-                    ) {
+                    } else if matches!(subcmd_lower.as_str(), "pull" | "run" | "create") {
                         // First non-flag arg is image, then stop
-                        extract_first_docker_image(
-                            &segment.args[1..],
-                            seg_idx,
-                            &mut results,
-                        );
+                        extract_first_docker_image(&segment.args[1..], seg_idx, &mut results);
                     }
                 }
             }
@@ -334,21 +327,10 @@ pub struct ExtractedUrl {
 }
 
 /// Common value-taking flags across docker subcommands.
-const DOCKER_VALUE_FLAGS: &[&str] = &[
-    "--platform",
-    "--format",
-    "--filter",
-    "-f",
-    "--label",
-    "-l",
-];
+const DOCKER_VALUE_FLAGS: &[&str] = &["--platform", "--format", "--filter", "-f", "--label", "-l"];
 
 /// Extract the first non-flag argument as a Docker image reference.
-fn extract_first_docker_image(
-    args: &[String],
-    seg_idx: usize,
-    results: &mut Vec<ExtractedUrl>,
-) {
+fn extract_first_docker_image(args: &[String], seg_idx: usize, results: &mut Vec<ExtractedUrl>) {
     let mut skip_next = false;
     for arg in args {
         if skip_next {
@@ -456,8 +438,7 @@ fn is_interpreter(cmd: &str) -> bool {
 fn strip_quotes(s: &str) -> String {
     let s = s.trim();
     if s.len() >= 2
-        && ((s.starts_with('"') && s.ends_with('"'))
-            || (s.starts_with('\'') && s.ends_with('\'')))
+        && ((s.starts_with('"') && s.ends_with('"')) || (s.starts_with('\'') && s.ends_with('\'')))
     {
         s[1..s.len() - 1].to_string()
     } else {
@@ -767,7 +748,11 @@ mod tests {
             .iter()
             .filter(|u| matches!(u.parsed, UrlLike::DockerRef { .. }))
             .collect();
-        assert_eq!(docker_urls.len(), 0, "build context '.' should not be treated as image");
+        assert_eq!(
+            docker_urls.len(),
+            0,
+            "build context '.' should not be treated as image"
+        );
     }
 
     #[test]

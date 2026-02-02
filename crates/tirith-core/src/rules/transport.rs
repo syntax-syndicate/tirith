@@ -70,8 +70,7 @@ fn check_shortened_url(url: &UrlLike, findings: &mut Vec<Finding>) {
 fn strip_quotes_simple(s: &str) -> String {
     let s = s.trim();
     if s.len() >= 2
-        && ((s.starts_with('"') && s.ends_with('"'))
-            || (s.starts_with('\'') && s.ends_with('\'')))
+        && ((s.starts_with('"') && s.ends_with('"')) || (s.starts_with('\'') && s.ends_with('\'')))
     {
         s[1..s.len() - 1].to_string()
     } else {
@@ -116,15 +115,9 @@ mod tests {
 
     #[test]
     fn test_quoted_insecure_flags() {
-        let args = vec![
-            "\"-k\"".to_string(),
-            "https://example.com".to_string(),
-        ];
+        let args = vec!["\"-k\"".to_string(), "https://example.com".to_string()];
         let findings = check_insecure_flags(&args, true);
-        assert!(
-            !findings.is_empty(),
-            "should detect -k even when quoted"
-        );
+        assert!(!findings.is_empty(), "should detect -k even when quoted");
     }
 
     #[test]

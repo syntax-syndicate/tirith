@@ -291,10 +291,10 @@ mod tests {
         );
         // Should have findings about bidi
         assert!(
-            verdict.findings.iter().any(|f| matches!(
-                f.rule_id,
-                crate::verdict::RuleId::BidiControls
-            )),
+            verdict
+                .findings
+                .iter()
+                .any(|f| matches!(f.rule_id, crate::verdict::RuleId::BidiControls)),
             "should detect bidi controls in exec context"
         );
     }
