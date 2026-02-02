@@ -22,7 +22,7 @@ min_milestone = 1
 input = "curl https://gооgle.com/install"
 context = "exec"
 expected_action = "block"
-expected_rules = ["non_ascii_hostname"]
+expected_rules = ["non_ascii_hostname", "mixed_script_in_label"]
 
 [[fixture]]
 name = "userinfo_trick_domain"

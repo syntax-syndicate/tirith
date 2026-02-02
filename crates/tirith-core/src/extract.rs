@@ -19,6 +19,11 @@ mod tier1_generated {
     include!(concat!(env!("OUT_DIR"), "/tier1_gen.rs"));
 }
 
+/// Expose the build-time extractor IDs for test-time cross-referencing.
+pub fn extractor_ids() -> &'static [&'static str] {
+    tier1_generated::EXTRACTOR_IDS
+}
+
 /// Tier 1 exec-time regex — generated from declarative pattern table in build.rs.
 static TIER1_EXEC_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(tier1_generated::TIER1_EXEC_PATTERN).expect("tier1 exec regex must compile")

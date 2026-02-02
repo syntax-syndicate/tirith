@@ -113,6 +113,14 @@ expected_action = "warn"
 expected_rules = ["double_encoding"]
 
 [[fixture]]
+name = "homoglyph_in_path_segment"
+min_milestone = 1
+input = "curl https://example.com/іnstall/payload"
+context = "exec"
+expected_action = "warn"
+expected_rules = ["homoglyph_in_path"]
+
+[[fixture]]
 name = "invalid_percent_triplet_ok"
 min_milestone = 1
 input = "curl https://example.com/100%GGdone"

@@ -17,6 +17,9 @@ fuzz/corpus/
 # Local env
 .env
 
+# Claude Code context
+CLAUDE.md
+
 # Non-project files
 charts/
 chart_urls*.json

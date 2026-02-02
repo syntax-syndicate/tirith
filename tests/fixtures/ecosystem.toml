@@ -199,3 +199,19 @@ input = "npm install express"
 context = "exec"
 expected_action = "allow"
 expected_rules = []
+
+[[fixture]]
+name = "git_typosquat_linux"
+min_milestone = 1
+input = "git clone https://github.com/torvalds/liux.git"
+context = "exec"
+expected_action = "warn"
+expected_rules = ["git_typosquat"]
+
+[[fixture]]
+name = "web3_eth_address_in_url"
+min_milestone = 1
+input = "curl https://example.com/wallet/0x742d35Cc6634C0532925a3b844Bc8e7595f0bEb8"
+context = "exec"
+expected_action = "warn"
+expected_rules = ["web3_address_in_url"]

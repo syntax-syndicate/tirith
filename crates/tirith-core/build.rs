@@ -273,6 +273,18 @@ const PATTERN_TABLE: &[PatternEntry] = &[
         notes: "URL shortener domains",
     },
     PatternEntry {
+        id: "dotfile_overwrite",
+        tier1_exec_fragments: &[r">\s*~/\.", r">\s*\$HOME/\."],
+        tier1_paste_only_fragments: &[],
+        notes: "Redirect output to dotfiles in home directory (> ~/.bashrc, >> $HOME/.profile)",
+    },
+    PatternEntry {
+        id: "archive_extract_sensitive",
+        tier1_exec_fragments: &[r"(?:tar|unzip|7z)\s"],
+        tier1_paste_only_fragments: &[],
+        notes: "Archive extraction commands that may target sensitive paths",
+    },
+    PatternEntry {
         id: "non_ascii_paste",
         tier1_exec_fragments: &[],
         tier1_paste_only_fragments: &[r"[^\x00-\x7F]"],

