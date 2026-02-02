@@ -1,0 +1,242 @@
+// Per-component normalization: decode only unreserved characters (RFC 3986 §2.3).
+// Unreserved: A-Z, a-z, 0-9, '-', '.', '_', '~'
+
+/// Check if a byte value represents an unreserved character.
+fn is_unreserved(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~')
+}
+
+/// Decode a hex character to its value.
+fn hex_val(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
+}
+
+/// Decode only unreserved percent-encoded characters in a string.
+/// Returns the normalized string and whether any unreserved chars were decoded.
+/// Hex digits in percent-triplets are always normalized to uppercase.
+fn decode_unreserved_once(input: &str) -> (String, bool) {
+    let bytes = input.as_bytes();
+    let mut result = Vec::with_capacity(bytes.len());
+    let mut decoded_any = false;
+    let mut i = 0;
+
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let (Some(hi), Some(lo)) = (hex_val(bytes[i + 1]), hex_val(bytes[i + 2])) {
+                let decoded_byte = (hi << 4) | lo;
+                if is_unreserved(decoded_byte) {
+                    result.push(decoded_byte);
+                    decoded_any = true;
+                    i += 3;
+                    continue;
+                } else {
+                    // Normalize hex to uppercase but keep encoded
+                    result.push(b'%');
+                    result.push(bytes[i + 1].to_ascii_uppercase());
+                    result.push(bytes[i + 2].to_ascii_uppercase());
+                    i += 3;
+                    continue;
+                }
+            }
+            // Invalid percent-triplet, leave as-is
+            result.push(bytes[i]);
+            i += 1;
+        } else {
+            result.push(bytes[i]);
+            i += 1;
+        }
+    }
+
+    (String::from_utf8_lossy(&result).into_owned(), decoded_any)
+}
+
+/// Normalize a URL path component (decode unreserved chars, up to 3 rounds).
+/// Returns (normalized, raw, detected_double_encoding).
+pub fn normalize_path(raw: &str) -> NormalizedComponent {
+    let mut current = raw.to_string();
+    let mut rounds = 0;
+
+    // Always run at least one pass (for hex case normalization),
+    // then continue if unreserved chars were decoded (up to 3 rounds).
+    loop {
+        let (decoded, did_decode) = decode_unreserved_once(&current);
+        current = decoded;
+        rounds += 1;
+        if !did_decode || rounds >= 3 {
+            break;
+        }
+    }
+
+    // Detect double-encoding: look for %25XX patterns in the final result
+    // This indicates a percent-encoded percent sign that decoded to %XX
+    let double_encoded = detect_double_encoding(&current);
+
+    NormalizedComponent {
+        raw: raw.to_string(),
+        normalized: current,
+        double_encoded,
+        rounds,
+    }
+}
+
+/// Normalize a query/fragment component (same treatment as path).
+pub fn normalize_query(raw: &str) -> NormalizedComponent {
+    normalize_path(raw)
+}
+
+/// Detect genuine double-encoding: %25XX patterns (percent-encoded percent sign).
+fn detect_double_encoding(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    if bytes.len() < 5 {
+        return false;
+    }
+    let mut i = 0;
+    while i + 4 < bytes.len() {
+        if bytes[i] == b'%'
+            && bytes[i + 1] == b'2'
+            && bytes[i + 2] == b'5'
+            && hex_val(bytes[i + 3]).is_some()
+            && hex_val(bytes[i + 4]).is_some()
+        {
+            return true;
+        }
+        i += 1;
+    }
+    false
+}
+
+/// Result of normalization.
+#[derive(Debug, Clone)]
+pub struct NormalizedComponent {
+    pub raw: String,
+    pub normalized: String,
+    pub double_encoded: bool,
+    pub rounds: u32,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_unreserved_decoded() {
+        // %41 = 'A' (unreserved) -> should be decoded
+        let result = normalize_path("%41");
+        assert_eq!(result.normalized, "A");
+    }
+
+    #[test]
+    fn test_reserved_preserved() {
+        // %2F = '/' (reserved) -> should stay encoded
+        let result = normalize_path("%2F");
+        assert_eq!(result.normalized, "%2F");
+    }
+
+    #[test]
+    fn test_reserved_at_preserved() {
+        // %40 = '@' (reserved) -> should stay encoded
+        let result = normalize_path("%40");
+        assert_eq!(result.normalized, "%40");
+    }
+
+    #[test]
+    fn test_reserved_colon_preserved() {
+        // %3A = ':' (reserved) -> should stay encoded
+        let result = normalize_path("%3A");
+        assert_eq!(result.normalized, "%3A");
+    }
+
+    #[test]
+    fn test_reserved_question_preserved() {
+        // %3F = '?' (reserved) -> should stay encoded
+        let result = normalize_path("%3F");
+        assert_eq!(result.normalized, "%3F");
+    }
+
+    #[test]
+    fn test_hex_case_normalized() {
+        // %2f (lowercase) -> %2F (uppercase, still reserved)
+        let result = normalize_path("%2f");
+        assert_eq!(result.normalized, "%2F");
+    }
+
+    #[test]
+    fn test_double_encoding_detected() {
+        // %252F decodes to %2F after one round (unreserved part of %25 = '%')
+        // Actually %25 is '%' which is NOT unreserved, so it stays as %25
+        // %252F stays as %252F -> but we detect the %25 pattern
+        let result = normalize_path("%252F");
+        assert!(result.double_encoded);
+    }
+
+    #[test]
+    fn test_single_level_not_double_encoded() {
+        // %2F is normal, not double-encoded
+        let result = normalize_path("%2F");
+        assert!(!result.double_encoded);
+    }
+
+    #[test]
+    fn test_mixed_encoding() {
+        // %41%2F -> A%2F (A decoded, / preserved)
+        let result = normalize_path("%41%2F");
+        assert_eq!(result.normalized, "A%2F");
+    }
+
+    #[test]
+    fn test_tilde_decoded() {
+        // %7E = '~' (unreserved) -> decoded
+        let result = normalize_path("%7E");
+        assert_eq!(result.normalized, "~");
+    }
+
+    #[test]
+    fn test_hyphen_decoded() {
+        // %2D = '-' (unreserved) -> decoded
+        let result = normalize_path("%2D");
+        assert_eq!(result.normalized, "-");
+    }
+
+    #[test]
+    fn test_dot_decoded() {
+        // %2E = '.' (unreserved) -> decoded
+        let result = normalize_path("%2E");
+        assert_eq!(result.normalized, ".");
+    }
+
+    #[test]
+    fn test_underscore_decoded() {
+        // %5F = '_' (unreserved) -> decoded
+        let result = normalize_path("%5F");
+        assert_eq!(result.normalized, "_");
+    }
+
+    #[test]
+    fn test_no_encoding() {
+        let result = normalize_path("/path/to/file");
+        assert_eq!(result.normalized, "/path/to/file");
+        // One pass always runs (for hex case normalization), even with no encodings
+        assert_eq!(result.rounds, 1);
+    }
+
+    #[test]
+    fn test_invalid_percent_triplet() {
+        // %GG is not valid hex -> left as-is
+        let result = normalize_path("%GG");
+        assert_eq!(result.normalized, "%GG");
+    }
+
+    #[test]
+    fn test_multiple_rounds() {
+        // %2541 -> round 1: %25 stays (not unreserved), 41 stays as part of %2541
+        // Actually %2541: %25 = '%' (not unreserved, stays), then '4', '1'
+        // So it stays %2541 but we detect double encoding
+        let result = normalize_path("%2541");
+        assert!(result.double_encoded);
+    }
+}

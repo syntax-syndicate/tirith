@@ -1,0 +1,22 @@
+/target
+*.swp
+*.swo
+*~
+.DS_Store
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Fuzz artifacts
+fuzz/artifacts/
+fuzz/corpus/
+
+# Local env
+.env
+
+# Non-project files
+charts/
+chart_urls*.json

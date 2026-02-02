@@ -1,0 +1,18 @@
+tirith
+Copyright 2026 tirith contributors
+
+This product includes software and data from third parties:
+
+---
+
+Unicode Consortium — confusables.txt
+  Source: https://www.unicode.org/Public/security/latest/confusables.txt
+  License: Unicode License v3 (https://www.unicode.org/license.txt)
+  Used for: Homoglyph / confusable domain detection
+
+---
+
+Mozilla Foundation — Public Suffix List
+  Source: https://publicsuffix.org/
+  License: Mozilla Public License 2.0 (MPL-2.0)
+  Used for: Registrable domain extraction (eTLD+1)
