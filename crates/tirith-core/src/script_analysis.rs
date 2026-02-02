@@ -56,21 +56,60 @@ pub fn analyze(content: &str, interpreter: &str) -> ScriptAnalysis {
 /// Detect interpreter from shebang line.
 pub fn detect_interpreter(content: &str) -> &str {
     if let Some(first_line) = content.lines().next() {
+        let first_line = first_line.trim();
         if first_line.starts_with("#!") {
             let shebang = first_line.trim_start_matches("#!");
             let parts: Vec<&str> = shebang.split_whitespace().collect();
             if let Some(prog) = parts.first() {
                 let base = prog.rsplit('/').next().unwrap_or(prog);
-                match base {
-                    "env" => {
-                        if let Some(actual) = parts.get(1) {
-                            return actual;
+                if base == "env" {
+                    // Skip flags (-S, -i, etc.) and VAR=val assignments
+                    for part in parts.iter().skip(1) {
+                        if part.starts_with('-') || part.contains('=') {
+                            continue;
                         }
+                        return part;
                     }
-                    other => return other,
+                } else {
+                    return base;
                 }
             }
         }
     }
     "sh" // default
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_detect_interpreter_env_s() {
+        let content = "#!/usr/bin/env -S python3 -u\nprint('hello')";
+        assert_eq!(detect_interpreter(content), "python3");
+    }
+
+    #[test]
+    fn test_detect_interpreter_env_s_with_var() {
+        let content = "#!/usr/bin/env -S VAR=1 python3\nprint('hello')";
+        assert_eq!(detect_interpreter(content), "python3");
+    }
+
+    #[test]
+    fn test_detect_interpreter_crlf() {
+        let content = "#!/bin/bash\r\necho hello";
+        assert_eq!(detect_interpreter(content), "bash");
+    }
+
+    #[test]
+    fn test_detect_interpreter_basic() {
+        let content = "#!/usr/bin/env python3\nprint('hello')";
+        assert_eq!(detect_interpreter(content), "python3");
+    }
+
+    #[test]
+    fn test_detect_interpreter_no_shebang() {
+        let content = "echo hello";
+        assert_eq!(detect_interpreter(content), "sh");
+    }
 }

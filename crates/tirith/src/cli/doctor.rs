@@ -40,7 +40,7 @@ fn gather_info() -> DoctorInfo {
     let detected_shell = detect_shell().to_string();
     let interactive = is_terminal::is_terminal(std::io::stderr());
 
-    let hook_dir = crate::cli::init::find_hook_dir();
+    let hook_dir = crate::cli::init::find_hook_dir_readonly();
     let hooks_materialized = hook_dir
         .as_ref()
         .map(|d| {
@@ -60,17 +60,24 @@ fn gather_info() -> DoctorInfo {
     let mut policy_paths = Vec::new();
     // User-level policy
     if let Some(config) = tirith_core::policy::config_dir() {
-        let user_policy = config.join("policy.yaml");
-        if user_policy.exists() {
-            policy_paths.push(user_policy.display().to_string());
+        for ext in &["policy.yaml", "policy.yml"] {
+            let user_policy = config.join(ext);
+            if user_policy.exists() {
+                policy_paths.push(user_policy.display().to_string());
+                break;
+            }
         }
     }
     // TIRITH_POLICY_ROOT override
     let policy_root_env = std::env::var("TIRITH_POLICY_ROOT").ok();
     if let Some(ref root) = policy_root_env {
-        let p = PathBuf::from(root).join(".tirith").join("policy.yaml");
-        if p.exists() {
-            policy_paths.push(p.display().to_string());
+        let tirith_dir = PathBuf::from(root).join(".tirith");
+        for ext in &["policy.yaml", "policy.yml"] {
+            let p = tirith_dir.join(ext);
+            if p.exists() {
+                policy_paths.push(p.display().to_string());
+                break;
+            }
         }
     }
 

@@ -125,6 +125,58 @@ pub fn find_hook_dir() -> Option<PathBuf> {
     materialize_hooks()
 }
 
+/// Find the shell hooks directory without materializing (read-only variant for diagnostics).
+pub fn find_hook_dir_readonly() -> Option<PathBuf> {
+    // 1. Explicit env var override
+    if let Ok(dir) = std::env::var("TIRITH_SHELL_DIR") {
+        let p = PathBuf::from(&dir);
+        if p.join("lib").exists() {
+            return Some(p);
+        }
+    }
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(bin_dir) = exe.parent() {
+            // 2. Homebrew layout: ../share/tirith/shell
+            let brew_dir = bin_dir.join("../share/tirith/shell");
+            if brew_dir.join("lib").exists() {
+                return Some(brew_dir.canonicalize().unwrap_or(brew_dir));
+            }
+
+            // 3. System package layout: /usr/share/tirith/shell
+            #[cfg(unix)]
+            {
+                let sys_dir = PathBuf::from("/usr/share/tirith/shell");
+                if sys_dir.join("lib").exists() {
+                    return Some(sys_dir);
+                }
+            }
+
+            // 4. cargo install layout: ../shell
+            let cargo_dir = bin_dir.join("../shell");
+            if cargo_dir.join("lib").exists() {
+                return Some(cargo_dir.canonicalize().unwrap_or(cargo_dir));
+            }
+
+            // 5. Workspace dev layout: ../../shell
+            let dev_dir = bin_dir.join("../../shell");
+            if dev_dir.join("lib").exists() {
+                return Some(dev_dir.canonicalize().unwrap_or(dev_dir));
+            }
+        }
+    }
+
+    // 6. Check if hooks were previously materialized (but don't create them)
+    if let Some(data_dir) = tirith_core::policy::data_dir() {
+        let shell_dir = data_dir.join("shell");
+        if shell_dir.join("lib").exists() {
+            return Some(shell_dir);
+        }
+    }
+
+    None
+}
+
 /// Write embedded hook files to the user data directory.
 /// Returns the shell directory path if successful.
 fn materialize_hooks() -> Option<PathBuf> {

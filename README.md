@@ -100,7 +100,7 @@ Nothing. Zero output. Sub-millisecond overhead. You forget tirith is running.
 
 ## Data handling
 
-Tirith writes a local JSONL audit log to `~/.local/share/tirith/audit.jsonl` containing:
+Tirith writes a local JSONL audit log to `~/.local/share/tirith/log.jsonl` containing:
 - Timestamp, action taken, rule ID, redacted command preview
 - **No** full commands, environment variables, or file contents
 

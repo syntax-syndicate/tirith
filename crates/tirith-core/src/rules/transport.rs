@@ -67,13 +67,26 @@ fn check_shortened_url(url: &UrlLike, findings: &mut Vec<Finding>) {
     }
 }
 
+fn strip_quotes_simple(s: &str) -> String {
+    let s = s.trim();
+    if s.len() >= 2
+        && ((s.starts_with('"') && s.ends_with('"'))
+            || (s.starts_with('\'') && s.ends_with('\'')))
+    {
+        s[1..s.len() - 1].to_string()
+    } else {
+        s.to_string()
+    }
+}
+
 /// Check command arguments for insecure TLS flags.
 pub fn check_insecure_flags(args: &[String], in_sink: bool) -> Vec<Finding> {
     let mut findings = Vec::new();
     let insecure_flags = ["-k", "--insecure", "--no-check-certificate"];
 
     for arg in args {
-        if insecure_flags.contains(&arg.as_str()) {
+        let clean = strip_quotes_simple(arg);
+        if insecure_flags.contains(&clean.as_str()) {
             let severity = if in_sink {
                 Severity::High
             } else {
@@ -95,4 +108,39 @@ pub fn check_insecure_flags(args: &[String], in_sink: bool) -> Vec<Finding> {
     }
 
     findings
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_quoted_insecure_flags() {
+        let args = vec![
+            "\"-k\"".to_string(),
+            "https://example.com".to_string(),
+        ];
+        let findings = check_insecure_flags(&args, true);
+        assert!(
+            !findings.is_empty(),
+            "should detect -k even when quoted"
+        );
+    }
+
+    #[test]
+    fn test_single_quoted_insecure_flags() {
+        let args = vec!["'-k'".to_string()];
+        let findings = check_insecure_flags(&args, true);
+        assert!(
+            !findings.is_empty(),
+            "should detect -k even when single-quoted"
+        );
+    }
+
+    #[test]
+    fn test_unquoted_insecure_flags_still_work() {
+        let args = vec!["-k".to_string()];
+        let findings = check_insecure_flags(&args, true);
+        assert!(!findings.is_empty());
+    }
 }

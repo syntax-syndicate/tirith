@@ -30,6 +30,11 @@ pub fn log_verdict(
     log_path: Option<PathBuf>,
     event_id: Option<String>,
 ) {
+    // Early exit if logging disabled
+    if std::env::var("TIRITH_LOG").ok().as_deref() == Some("0") {
+        return;
+    }
+
     let path = log_path.or_else(default_log_path);
     let path = match path {
         Some(p) => p,
@@ -84,6 +89,47 @@ pub fn log_verdict(
 
 fn default_log_path() -> Option<PathBuf> {
     crate::policy::data_dir().map(|d| d.join("log.jsonl"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::verdict::{Action, Verdict};
+
+    #[test]
+    fn test_tirith_log_disabled() {
+        let dir = tempfile::tempdir().unwrap();
+        let log_path = dir.path().join("test.jsonl");
+
+        // Set TIRITH_LOG=0 to disable logging
+        std::env::set_var("TIRITH_LOG", "0");
+
+        let verdict = Verdict {
+            action: Action::Allow,
+            findings: vec![],
+            tier_reached: 1,
+            timings_ms: crate::verdict::Timings {
+                tier0_ms: 0.0,
+                tier1_ms: 0.0,
+                tier2_ms: None,
+                tier3_ms: None,
+                total_ms: 0.0,
+            },
+            bypass_requested: false,
+            bypass_honored: false,
+            interactive_detected: false,
+            policy_path_used: None,
+            urls_extracted_count: None,
+        };
+
+        log_verdict(&verdict, "test cmd", Some(log_path.clone()), None);
+
+        // File should not have been created
+        assert!(!log_path.exists(), "log file should not be created when TIRITH_LOG=0");
+
+        // Clean up env var
+        std::env::remove_var("TIRITH_LOG");
+    }
 }
 
 fn redact_command(cmd: &str) -> String {

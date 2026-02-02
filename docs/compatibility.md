@@ -47,5 +47,5 @@ Exit codes are stable:
 
 ## Policy Format
 
-- `policy.yaml` format is additive: new keys may appear
+- `policy.yaml` (or `policy.yml`) format is additive: new keys may appear
 - Existing keys will not change semantics within a major version

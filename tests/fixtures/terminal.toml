@@ -120,8 +120,8 @@ name = "bidi_in_exec_context"
 min_milestone = 1
 input = "echo \u202edlrow"
 context = "exec"
-expected_action = "allow"
-expected_rules = []
+expected_action = "block"
+expected_rules = ["bidi_controls"]
 
 [[fixture]]
 name = "lrm_rlm_paste"

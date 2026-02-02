@@ -1,0 +1,12 @@
+{
+  "name": "@sheeki03/tirith-darwin-arm64",
+  "version": "0.1.0",
+  "description": "tirith binary for macOS arm64",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sheeki03/tirith"
+  },
+  "os": ["darwin"],
+  "cpu": ["arm64"]
+}

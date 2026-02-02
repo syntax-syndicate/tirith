@@ -43,6 +43,7 @@ pub fn run(opts: RunOptions) -> Result<RunResult, String> {
                 attempt.follow()
             }
         }))
+        .timeout(std::time::Duration::from_secs(30))
         .build()
         .map_err(|e| format!("http client: {e}"))?;
 
@@ -56,7 +57,32 @@ pub fn run(opts: RunOptions) -> Result<RunResult, String> {
         redirects = list.clone();
     }
 
-    let content = response.bytes().map_err(|e| format!("read body: {e}"))?;
+    const MAX_BODY: u64 = 10 * 1024 * 1024; // 10 MiB
+
+    // Check Content-Length hint first (fast rejection)
+    if let Some(len) = response.content_length() {
+        if len > MAX_BODY {
+            return Err(format!(
+                "response too large: {len} bytes (max {} MiB)",
+                MAX_BODY / 1024 / 1024
+            ));
+        }
+    }
+
+    // Read with cap using std::io::Read::take
+    use std::io::Read;
+    let mut buf = Vec::new();
+    response
+        .take(MAX_BODY + 1)
+        .read_to_end(&mut buf)
+        .map_err(|e| format!("read body: {e}"))?;
+    if buf.len() as u64 > MAX_BODY {
+        return Err(format!(
+            "response body exceeds {} MiB limit",
+            MAX_BODY / 1024 / 1024
+        ));
+    }
+    let content = buf;
 
     // Compute SHA256
     let mut hasher = Sha256::new();

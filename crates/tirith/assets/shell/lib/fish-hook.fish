@@ -31,6 +31,8 @@ function _tirith_check_command
     end
 end
 
+# NOTE: Only intercepts Ctrl+V paste. Right-click and middle-click paste
+# bypass this check — fish does not expose a hookable paste event.
 function _tirith_check_paste
     # Read clipboard content
     set -l pasted (fish_clipboard_paste 2>/dev/null)
@@ -59,6 +61,9 @@ function fish_user_key_bindings
     # Override Enter
     bind \r _tirith_check_command
     bind \n _tirith_check_command
+
+    # Paste interception (Ctrl+V only; right-click and middle-click paste are not intercepted)
+    bind \cv _tirith_check_paste
 end
 
 # Save original key bindings function if it exists

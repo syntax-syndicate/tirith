@@ -1,0 +1,20 @@
+{
+  "name": "tirith",
+  "version": "0.1.0",
+  "description": "URL security analysis for shell environments",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sheeki03/tirith"
+  },
+  "bin": {
+    "tirith": "bin/tirith"
+  },
+  "optionalDependencies": {
+    "@sheeki03/tirith-darwin-arm64": "0.1.0",
+    "@sheeki03/tirith-darwin-x64": "0.1.0",
+    "@sheeki03/tirith-linux-x64": "0.1.0",
+    "@sheeki03/tirith-linux-arm64": "0.1.0",
+    "@sheeki03/tirith-win32-x64": "0.1.0"
+  }
+}

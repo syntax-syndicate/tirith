@@ -295,6 +295,14 @@ fn test_tier1_coverage() {
                 }
             }
 
+            // Exec context: bidi/zero-width check bypasses tier 1 regex (M4 fix)
+            if scan_context == ScanContext::Exec {
+                let byte_scan = tirith_core::extract::scan_bytes(fixture.input.as_bytes());
+                if byte_scan.has_bidi_controls || byte_scan.has_zero_width {
+                    continue;
+                }
+            }
+
             let regex_triggered = tirith_core::extract::tier1_scan(&fixture.input, scan_context);
 
             if !regex_triggered {

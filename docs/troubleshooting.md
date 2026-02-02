@@ -39,9 +39,9 @@ If a command is incorrectly blocked or warned:
 ## Policy discovery
 
 tirith searches for policy in this order:
-1. `TIRITH_POLICY_ROOT` env var (if set)
-2. Walk up from CWD looking for `.tirith/policy.yaml`
-3. `~/.config/tirith/policy.yaml` (user-level)
+1. `TIRITH_POLICY_ROOT` env var → `$TIRITH_POLICY_ROOT/.tirith/policy.yaml` (or `.yml`)
+2. Walk up from CWD looking for `.tirith/policy.yaml` (or `.yml`)
+3. `~/.config/tirith/policy.yaml` (or `.yml`) (user-level)
 
 Use `tirith doctor` to see which policy files are active.
 

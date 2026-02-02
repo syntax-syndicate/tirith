@@ -1,0 +1,22 @@
+{
+  "version": "0.1.0",
+  "description": "URL security analysis for shell environments",
+  "homepage": "https://github.com/sheeki03/tirith",
+  "license": "Apache-2.0",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/sheeki03/tirith/releases/download/v0.1.0/tirith-x86_64-pc-windows-msvc.zip",
+      "hash": "PLACEHOLDER"
+    }
+  },
+  "bin": "tirith.exe",
+  "notes": "Add to your PowerShell profile: Invoke-Expression (& tirith init)",
+  "checkver": "github",
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/sheeki03/tirith/releases/download/v$version/tirith-x86_64-pc-windows-msvc.zip"
+      }
+    }
+  }
+}

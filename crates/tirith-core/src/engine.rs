@@ -61,10 +61,18 @@ pub fn analyze(ctx: &AnalysisContext) -> Verdict {
     // Step 2: URL-like regex scan
     let regex_triggered = extract::tier1_scan(&ctx.input, ctx.scan_context);
 
+    // Step 3 (exec only): check for bidi/zero-width chars even without URLs
+    let exec_bidi_triggered = if ctx.scan_context == ScanContext::Exec {
+        let scan = extract::scan_bytes(ctx.input.as_bytes());
+        scan.has_bidi_controls || scan.has_zero_width
+    } else {
+        false
+    };
+
     let tier1_ms = tier1_start.elapsed().as_secs_f64() * 1000.0;
 
     // If nothing triggered, fast exit
-    if !byte_scan_triggered && !regex_triggered {
+    if !byte_scan_triggered && !regex_triggered && !exec_bidi_triggered {
         let total_ms = start.elapsed().as_secs_f64() * 1000.0;
         return Verdict::allow_fast(
             1,
@@ -257,4 +265,37 @@ pub fn analyze(ctx: &AnalysisContext) -> Verdict {
     verdict.urls_extracted_count = Some(extracted.len());
 
     verdict
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_exec_bidi_without_url() {
+        // Input with bidi control but no URL — should NOT fast-exit at tier 1
+        let input = format!("echo hello{}world", '\u{202E}');
+        let ctx = AnalysisContext {
+            input,
+            shell: ShellType::Posix,
+            scan_context: ScanContext::Exec,
+            raw_bytes: None,
+            interactive: true,
+            cwd: None,
+        };
+        let verdict = analyze(&ctx);
+        // Should reach tier 3 (not fast-exit at tier 1)
+        assert!(
+            verdict.tier_reached >= 3,
+            "bidi in exec should reach tier 3, got tier {}",
+            verdict.tier_reached
+        );
+        // Should have findings about bidi
+        assert!(
+            verdict.findings.iter().any(|f| matches!(
+                f.rule_id,
+                crate::verdict::RuleId::BidiControls
+            )),
+            "should detect bidi controls in exec context"
+        );
+    }
 }

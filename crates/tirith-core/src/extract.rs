@@ -82,25 +82,55 @@ pub fn scan_bytes(input: &[u8]) -> ByteScanResult {
     while i < len {
         let b = input[i];
 
-        // ANSI escape sequences
-        if b == 0x1b && i + 1 < len && input[i + 1] == b'[' {
-            result.has_ansi_escapes = true;
-            result.details.push(ByteFinding {
-                offset: i,
-                byte: b,
-                description: "ANSI escape sequence".to_string(),
-            });
-            i += 2;
-            continue;
+        // Escape sequences: CSI (\e[), OSC (\e]), APC (\e_), DCS (\eP)
+        if b == 0x1b {
+            if i + 1 < len {
+                let next = input[i + 1];
+                if next == b'[' || next == b']' || next == b'_' || next == b'P' {
+                    result.has_ansi_escapes = true;
+                    result.details.push(ByteFinding {
+                        offset: i,
+                        byte: b,
+                        description: match next {
+                            b'[' => "CSI escape sequence",
+                            b']' => "OSC escape sequence",
+                            b'_' => "APC escape sequence",
+                            b'P' => "DCS escape sequence",
+                            _ => "escape sequence",
+                        }
+                        .to_string(),
+                    });
+                    i += 2;
+                    continue;
+                }
+            } else {
+                // Trailing lone ESC
+                result.has_ansi_escapes = true;
+                result.details.push(ByteFinding {
+                    offset: i,
+                    byte: b,
+                    description: "trailing escape byte".to_string(),
+                });
+            }
         }
 
-        // Control characters (< 0x20, excluding common whitespace)
-        if b < 0x20 && b != b'\n' && b != b'\t' && b != 0x1b && (b == b'\r' || b == 0x08) {
+        // Control characters (< 0x20, excluding common whitespace and ESC)
+        if b < 0x20 && b != b'\n' && b != b'\t' && b != 0x1b {
             result.has_control_chars = true;
             result.details.push(ByteFinding {
                 offset: i,
                 byte: b,
                 description: format!("control character 0x{b:02x}"),
+            });
+        }
+
+        // DEL character
+        if b == 0x7F {
+            result.has_control_chars = true;
+            result.details.push(ByteFinding {
+                offset: i,
+                byte: b,
+                description: "control character 0x7f (DEL)".to_string(),
             });
         }
 
@@ -177,7 +207,7 @@ pub fn extract_urls(input: &str, shell: ShellType) -> Vec<ExtractedUrl> {
     let segments = tokenize::tokenize(input, shell);
     let mut results = Vec::new();
 
-    for segment in &segments {
+    for (seg_idx, segment) in segments.iter().enumerate() {
         // Extract standard URLs from raw text
         for mat in URL_REGEX.find_iter(&segment.raw) {
             let raw = mat.as_str().to_string();
@@ -185,7 +215,7 @@ pub fn extract_urls(input: &str, shell: ShellType) -> Vec<ExtractedUrl> {
             results.push(ExtractedUrl {
                 raw,
                 parsed: url,
-                segment_index: results.len(),
+                segment_index: seg_idx,
                 in_sink_context: is_sink_context(segment, &segments),
             });
         }
@@ -206,7 +236,7 @@ pub fn extract_urls(input: &str, shell: ShellType) -> Vec<ExtractedUrl> {
                             host: extract_host_from_schemeless(&clean),
                             path: extract_path_from_schemeless(&clean),
                         },
-                        segment_index: results.len(),
+                        segment_index: seg_idx,
                         in_sink_context: true,
                     });
                 }
@@ -219,23 +249,72 @@ pub fn extract_urls(input: &str, shell: ShellType) -> Vec<ExtractedUrl> {
             if matches!(cmd_lower.as_str(), "docker" | "podman" | "nerdctl") {
                 if let Some(docker_subcmd) = segment.args.first() {
                     let subcmd_lower = docker_subcmd.to_lowercase();
-                    if matches!(
-                        subcmd_lower.as_str(),
-                        "pull" | "run" | "build" | "create" | "image"
-                    ) {
-                        // The image ref is typically the last non-flag argument
-                        for arg in segment.args.iter().skip(1) {
-                            let clean = strip_quotes(arg);
-                            if !clean.starts_with('-') && !clean.contains("://") {
-                                let docker_url = parse::parse_docker_ref(&clean);
+                    if subcmd_lower == "build" {
+                        // For build, only -t/--tag values are image refs
+                        let mut i = 1;
+                        while i < segment.args.len() {
+                            let arg = strip_quotes(&segment.args[i]);
+                            if (arg == "-t" || arg == "--tag") && i + 1 < segment.args.len() {
+                                let tag_val = strip_quotes(&segment.args[i + 1]);
+                                if !tag_val.is_empty() {
+                                    let docker_url = parse::parse_docker_ref(&tag_val);
+                                    results.push(ExtractedUrl {
+                                        raw: tag_val,
+                                        parsed: docker_url,
+                                        segment_index: seg_idx,
+                                        in_sink_context: true,
+                                    });
+                                }
+                                i += 2;
+                            } else if arg.starts_with("-t") && arg.len() > 2 {
+                                let tag_val = strip_quotes(&arg[2..]);
+                                let docker_url = parse::parse_docker_ref(&tag_val);
                                 results.push(ExtractedUrl {
-                                    raw: clean,
+                                    raw: tag_val,
                                     parsed: docker_url,
-                                    segment_index: results.len(),
+                                    segment_index: seg_idx,
                                     in_sink_context: true,
                                 });
+                                i += 1;
+                            } else if let Some(val) = arg.strip_prefix("--tag=") {
+                                let tag_val = strip_quotes(val);
+                                let docker_url = parse::parse_docker_ref(&tag_val);
+                                results.push(ExtractedUrl {
+                                    raw: tag_val,
+                                    parsed: docker_url,
+                                    segment_index: seg_idx,
+                                    in_sink_context: true,
+                                });
+                                i += 1;
+                            } else {
+                                i += 1;
                             }
                         }
+                    } else if subcmd_lower == "image" {
+                        // docker image pull/push/inspect — actual subcmd is args[1]
+                        if let Some(image_subcmd) = segment.args.get(1) {
+                            let image_subcmd_lower = image_subcmd.to_lowercase();
+                            if matches!(
+                                image_subcmd_lower.as_str(),
+                                "pull" | "push" | "inspect" | "rm" | "tag"
+                            ) {
+                                extract_first_docker_image(
+                                    &segment.args[2..],
+                                    seg_idx,
+                                    &mut results,
+                                );
+                            }
+                        }
+                    } else if matches!(
+                        subcmd_lower.as_str(),
+                        "pull" | "run" | "create"
+                    ) {
+                        // First non-flag arg is image, then stop
+                        extract_first_docker_image(
+                            &segment.args[1..],
+                            seg_idx,
+                            &mut results,
+                        );
                     }
                 }
             }
@@ -252,6 +331,54 @@ pub struct ExtractedUrl {
     pub parsed: UrlLike,
     pub segment_index: usize,
     pub in_sink_context: bool,
+}
+
+/// Common value-taking flags across docker subcommands.
+const DOCKER_VALUE_FLAGS: &[&str] = &[
+    "--platform",
+    "--format",
+    "--filter",
+    "-f",
+    "--label",
+    "-l",
+];
+
+/// Extract the first non-flag argument as a Docker image reference.
+fn extract_first_docker_image(
+    args: &[String],
+    seg_idx: usize,
+    results: &mut Vec<ExtractedUrl>,
+) {
+    let mut skip_next = false;
+    for arg in args {
+        if skip_next {
+            skip_next = false;
+            continue;
+        }
+        let clean = strip_quotes(arg);
+        if clean == "--" {
+            break;
+        }
+        if clean.starts_with("--") && clean.contains('=') {
+            continue; // --flag=value, skip
+        }
+        if clean.starts_with('-') {
+            if DOCKER_VALUE_FLAGS.iter().any(|f| clean == *f) {
+                skip_next = true;
+            }
+            continue;
+        }
+        if !clean.contains("://") && clean != "." && clean != ".." && clean != "-" {
+            let docker_url = parse::parse_docker_ref(&clean);
+            results.push(ExtractedUrl {
+                raw: clean,
+                parsed: docker_url,
+                segment_index: seg_idx,
+                in_sink_context: true,
+            });
+        }
+        break; // Only first non-flag arg is the image
+    }
 }
 
 /// Check if a segment is in a "sink" context (executing/downloading).
@@ -328,7 +455,10 @@ fn is_interpreter(cmd: &str) -> bool {
 
 fn strip_quotes(s: &str) -> String {
     let s = s.trim();
-    if (s.starts_with('"') && s.ends_with('"')) || (s.starts_with('\'') && s.ends_with('\'')) {
+    if s.len() >= 2
+        && ((s.starts_with('"') && s.ends_with('"'))
+            || (s.starts_with('\'') && s.ends_with('\'')))
+    {
         s[1..s.len() - 1].to_string()
     } else {
         s.to_string()
@@ -364,7 +494,7 @@ fn looks_like_schemeless_host(s: &str) -> bool {
     }
     // Last label (TLD) should be 2-6 alphabetic chars
     let tld = labels.last().unwrap();
-    tld.len() >= 2 && tld.len() <= 6 && tld.chars().all(|c| c.is_ascii_alphabetic())
+    tld.len() >= 2 && tld.len() <= 63 && tld.chars().all(|c| c.is_ascii_alphabetic())
 }
 
 fn extract_host_from_schemeless(s: &str) -> String {
@@ -560,6 +690,94 @@ mod tests {
             ShellType::PowerShell,
         );
         assert!(!urls.is_empty());
+    }
+
+    #[test]
+    fn test_strip_quotes_single_char() {
+        assert_eq!(strip_quotes("\""), "\"");
+        assert_eq!(strip_quotes("'"), "'");
+    }
+
+    #[test]
+    fn test_strip_quotes_empty() {
+        assert_eq!(strip_quotes(""), "");
+    }
+
+    #[test]
+    fn test_scan_bytes_bel_vt_del() {
+        // BEL (0x07)
+        let input = b"hello\x07world";
+        let result = scan_bytes(input);
+        assert!(result.has_control_chars);
+
+        // VT (0x0B)
+        let input = b"hello\x0Bworld";
+        let result = scan_bytes(input);
+        assert!(result.has_control_chars);
+
+        // FF (0x0C)
+        let input = b"hello\x0Cworld";
+        let result = scan_bytes(input);
+        assert!(result.has_control_chars);
+
+        // DEL (0x7F)
+        let input = b"hello\x7Fworld";
+        let result = scan_bytes(input);
+        assert!(result.has_control_chars);
+    }
+
+    #[test]
+    fn test_scan_bytes_osc_apc_dcs() {
+        // OSC: \e]
+        let input = b"hello\x1b]0;title\x07world";
+        let result = scan_bytes(input);
+        assert!(result.has_ansi_escapes);
+
+        // APC: \e_
+        let input = b"hello\x1b_dataworld";
+        let result = scan_bytes(input);
+        assert!(result.has_ansi_escapes);
+
+        // DCS: \eP
+        let input = b"hello\x1bPdataworld";
+        let result = scan_bytes(input);
+        assert!(result.has_ansi_escapes);
+    }
+
+    #[test]
+    fn test_schemeless_long_tld() {
+        assert!(looks_like_schemeless_host("example.academy"));
+        assert!(looks_like_schemeless_host("example.photography"));
+    }
+
+    #[test]
+    fn test_segment_index_correct() {
+        let urls = extract_urls("curl https://a.com | wget https://b.com", ShellType::Posix);
+        // Each URL should have the segment index of the segment it came from
+        for url in &urls {
+            // segment_index should be 0 or 1, not an incrementing counter
+            assert!(url.segment_index <= 1);
+        }
+    }
+
+    #[test]
+    fn test_docker_build_context_not_image() {
+        let urls = extract_urls("docker build .", ShellType::Posix);
+        let docker_urls: Vec<_> = urls
+            .iter()
+            .filter(|u| matches!(u.parsed, UrlLike::DockerRef { .. }))
+            .collect();
+        assert_eq!(docker_urls.len(), 0, "build context '.' should not be treated as image");
+    }
+
+    #[test]
+    fn test_docker_image_subcmd() {
+        let urls = extract_urls("docker image pull nginx", ShellType::Posix);
+        let docker_urls: Vec<_> = urls
+            .iter()
+            .filter(|u| matches!(u.parsed, UrlLike::DockerRef { .. }))
+            .collect();
+        assert_eq!(docker_urls.len(), 1);
     }
 
     /// Constraint #2: Verify that EXTRACTOR_IDS is non-empty and

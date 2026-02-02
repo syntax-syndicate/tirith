@@ -1,0 +1,46 @@
+#!/usr/bin/env node
+
+"use strict";
+
+const { execFileSync } = require("child_process");
+const path = require("path");
+
+const PLATFORMS = {
+  "darwin-arm64": "@sheeki03/tirith-darwin-arm64",
+  "darwin-x64": "@sheeki03/tirith-darwin-x64",
+  "linux-x64": "@sheeki03/tirith-linux-x64",
+  "linux-arm64": "@sheeki03/tirith-linux-arm64",
+  "win32-x64": "@sheeki03/tirith-win32-x64",
+};
+
+const key = `${process.platform}-${process.arch}`;
+const pkg = PLATFORMS[key];
+
+if (!pkg) {
+  console.error(
+    `Unsupported platform: ${key}. Supported: ${Object.keys(PLATFORMS).join(", ")}`
+  );
+  process.exit(1);
+}
+
+let binPath;
+try {
+  const pkgDir = path.dirname(require.resolve(`${pkg}/package.json`));
+  const exe = process.platform === "win32" ? "tirith.exe" : "tirith";
+  binPath = path.join(pkgDir, "bin", exe);
+} catch (e) {
+  console.error(
+    `Could not find package ${pkg}. Make sure it was installed as an optional dependency.\n` +
+      `Try: npm install tirith --force`
+  );
+  process.exit(1);
+}
+
+try {
+  execFileSync(binPath, process.argv.slice(2), { stdio: "inherit" });
+} catch (e) {
+  if (e.status !== undefined) {
+    process.exit(e.status);
+  }
+  throw e;
+}

@@ -5,6 +5,19 @@ use std::path::{Path, PathBuf};
 
 use crate::verdict::{RuleId, Severity};
 
+/// Try both `.yaml` and `.yml` extensions in a directory.
+fn find_policy_in_dir(dir: &Path) -> Option<PathBuf> {
+    let yaml = dir.join("policy.yaml");
+    if yaml.exists() {
+        return Some(yaml);
+    }
+    let yml = dir.join("policy.yml");
+    if yml.exists() {
+        return Some(yml);
+    }
+    None
+}
+
 /// Policy configuration loaded from YAML.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -93,8 +106,7 @@ impl Policy {
     pub fn discover(cwd: Option<&str>) -> Self {
         // Check env override first
         if let Ok(root) = std::env::var("TIRITH_POLICY_ROOT") {
-            let path = PathBuf::from(&root).join("policy.yml");
-            if path.exists() {
+            if let Some(path) = find_policy_in_dir(&PathBuf::from(&root).join(".tirith")) {
                 return Self::load_from_path(&path);
             }
         }
@@ -216,9 +228,8 @@ fn discover_policy_path(cwd: Option<&str>) -> Option<PathBuf> {
 
     let mut current = start.as_path();
     loop {
-        // Check for .tirith/policy.yml
-        let candidate = current.join(".tirith").join("policy.yml");
-        if candidate.exists() {
+        // Check for .tirith/policy.yaml or .tirith/policy.yml
+        if let Some(candidate) = find_policy_in_dir(&current.join(".tirith")) {
             return Some(candidate);
         }
 
@@ -260,7 +271,7 @@ fn find_repo_root(cwd: Option<&str>) -> Option<PathBuf> {
 /// Get user-level policy path.
 fn user_policy_path() -> Option<PathBuf> {
     let base = etcetera::choose_base_strategy().ok()?;
-    Some(base.config_dir().join("tirith").join("policy.yml"))
+    find_policy_in_dir(&base.config_dir().join("tirith"))
 }
 
 /// Get tirith data directory.

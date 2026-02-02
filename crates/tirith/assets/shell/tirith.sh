@@ -23,10 +23,10 @@ _tirith_shell="$(_tirith_detect_shell)"
 
 case "$_tirith_shell" in
   zsh)
-    source "${_tirith_dir}/lib/zsh-hook.zsh"
+    . "${_tirith_dir}/lib/zsh-hook.zsh"
     ;;
   bash)
-    source "${_tirith_dir}/lib/bash-hook.bash"
+    . "${_tirith_dir}/lib/bash-hook.bash"
     ;;
   fish)
     # Fish sources differently; this path is for documentation.

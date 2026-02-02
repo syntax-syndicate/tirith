@@ -328,7 +328,7 @@ pub fn parse_docker_ref(raw: &str) -> UrlLike {
         let before_colon = &remaining[..colon_idx];
         // If the part after colon contains no '/' and the part before contains no ':',
         // or if this is clearly a tag (no dots in tag portion)
-        if !potential_tag.contains('/') && !potential_tag.contains('.') {
+        if !potential_tag.contains('/') {
             tag = Some(potential_tag.to_string());
             remaining = before_colon;
         }
@@ -530,6 +530,47 @@ mod tests {
         {
             assert_eq!(registry.as_deref(), Some("gcr.io"));
             assert_eq!(image, "project/image");
+        }
+    }
+
+    #[test]
+    fn test_docker_dotted_tag() {
+        let u = parse_docker_ref("nginx:1.25");
+        if let UrlLike::DockerRef { image, tag, .. } = &u {
+            assert_eq!(image, "library/nginx");
+            assert_eq!(tag.as_deref(), Some("1.25"));
+        } else {
+            panic!("expected DockerRef");
+        }
+    }
+
+    #[test]
+    fn test_docker_registry_port_no_tag() {
+        let u = parse_docker_ref("registry.io:5000/nginx");
+        if let UrlLike::DockerRef {
+            registry, image, tag, ..
+        } = &u
+        {
+            assert_eq!(registry.as_deref(), Some("registry.io:5000"));
+            assert_eq!(image, "nginx");
+            assert!(tag.is_none());
+        } else {
+            panic!("expected DockerRef");
+        }
+    }
+
+    #[test]
+    fn test_docker_registry_port_with_dotted_tag() {
+        let u = parse_docker_ref("registry.io:5000/nginx:1.25");
+        if let UrlLike::DockerRef {
+            registry, image, tag, ..
+        } = &u
+        {
+            assert_eq!(registry.as_deref(), Some("registry.io:5000"));
+            assert_eq!(image, "nginx");
+            assert_eq!(tag.as_deref(), Some("1.25"));
+        } else {
+            panic!("expected DockerRef");
         }
     }
 

