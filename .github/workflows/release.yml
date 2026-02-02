@@ -45,13 +45,19 @@ jobs:
         run: cargo build --release --locked --target ${{ matrix.target }} -p tirith
 
       - name: Generate completions and man page (Unix)
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' && matrix.target != 'aarch64-unknown-linux-gnu'
         run: |
           mkdir -p staging/completions staging/man
           ./target/${{ matrix.target }}/release/tirith completions bash > staging/completions/tirith.bash
           ./target/${{ matrix.target }}/release/tirith completions zsh > staging/completions/_tirith
           ./target/${{ matrix.target }}/release/tirith completions fish > staging/completions/tirith.fish
           ./target/${{ matrix.target }}/release/tirith manpage > staging/man/tirith.1
+          cp target/${{ matrix.target }}/release/tirith staging/
+
+      - name: Stage binary only (cross-compiled Unix)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          mkdir -p staging
           cp target/${{ matrix.target }}/release/tirith staging/
 
       - name: Generate completions and man page (Windows)
@@ -69,7 +75,11 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           cd staging
-          tar czf ../tirith-${{ matrix.target }}.tar.gz tirith completions man
+          if [ -d completions ]; then
+            tar czf ../tirith-${{ matrix.target }}.tar.gz tirith completions man
+          else
+            tar czf ../tirith-${{ matrix.target }}.tar.gz tirith
+          fi
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
