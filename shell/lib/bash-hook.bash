@@ -144,7 +144,8 @@ if [[ "$_TIRITH_BASH_MODE" == "enter" ]]; then
       local rc=$?
 
       if [[ $rc -eq 1 ]]; then
-        # Block: show warning, discard paste
+        # Block: show what was pasted, then warning, discard paste
+        printf 'paste> %s\n' "$pasted"
         [[ -n "$output" ]] && printf '%s\n' "$output"
         return
       elif [[ $rc -eq 2 ]]; then

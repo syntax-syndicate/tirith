@@ -31,13 +31,18 @@ if functions -q fish_clipboard_paste; and not functions -q _tirith_original_fish
             return
         end
 
-        # Check with tirith (stderr stays on stderr for warnings)
-        echo -n "$content" | tirith paste --shell fish
+        # Check with tirith and capture output
+        set -l output (echo -n "$content" | tirith paste --shell fish 2>&1)
         set -l rc $status
 
         if test $rc -eq 1
-            # Blocked - return nothing (paste is suppressed)
+            # Blocked - show what was pasted, then warning
+            echo "paste> $content" >&2
+            test -n "$output"; and echo "$output" >&2
             return
+        else if test $rc -eq 2
+            # Warn - show warning, continue with paste
+            test -n "$output"; and echo "$output" >&2
         end
 
         # Allowed - output the content for insertion

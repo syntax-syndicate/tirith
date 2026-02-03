@@ -68,9 +68,10 @@ _tirith_bracketed_paste() {
     local rc=$?
 
     if [[ $rc -eq 1 ]]; then
-      # Block: revert the paste and show warning
+      # Block: revert the paste, show what was pasted, then warning
       BUFFER="$old_buffer"
       CURSOR=$old_cursor
+      print -r -- "paste> $pasted"
       [[ -n "$output" ]] && print -r -- "$output"
       zle reset-prompt
     elif [[ $rc -eq 2 ]]; then
