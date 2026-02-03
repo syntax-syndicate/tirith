@@ -532,7 +532,7 @@ jobs:
             VER="${VERSION#v}"
 
             # Install build tools
-            dnf install -y gcc rpm-build curl ca-certificates git
+            dnf install -y --allowerasing gcc rpm-build curl ca-certificates git
             curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
             source $HOME/.cargo/env
 
